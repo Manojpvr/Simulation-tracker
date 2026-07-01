@@ -282,14 +282,19 @@ function SimTracker() {
   const reset = () => { if (confirm("Clear everything?")) persist([], []); };
   const handleImport = () => { importData((s, f) => persist(s, f)); };
 
-  const visible = useMemo(() => {
-    let list = sims;
-    if (selectedFolder === "__all__") {} else if (selectedFolder === null) { list = list.filter((s) => !s.folderId); } else { const ids = getDescendantIds(folders, selectedFolder); list = list.filter((s) => ids.includes(s.folderId)); }
-    if (statusFilter !== "all") list = list.filter((s) => s.status === statusFilter);
-    return list;
-  }, [sims, folders, selectedFolder, statusFilter]);
+  const folderSims = useMemo(() => {
+    if (selectedFolder === "__all__") return sims;
+    if (selectedFolder === null) return sims.filter((s) => !s.folderId);
+    const ids = getDescendantIds(folders, selectedFolder);
+    return sims.filter((s) => ids.includes(s.folderId));
+  }, [sims, folders, selectedFolder]);
 
-  const counts = {}; STATUSES.forEach((s) => (counts[s.key] = 0)); visible.forEach((s) => counts[s.status]++);
+  const visible = useMemo(() => (
+    statusFilter === "all" ? folderSims : folderSims.filter((s) => s.status === statusFilter)
+  ), [folderSims, statusFilter]);
+
+  // Status badge counts reflect the whole folder, independent of the active status filter.
+  const counts = {}; STATUSES.forEach((s) => (counts[s.key] = 0)); folderSims.forEach((s) => counts[s.status]++);
   if (!loaded) return <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>Loading…</div>;
   const title = selectedFolder === "__all__" ? "All Simulations" : selectedFolder === null ? "Unfiled" : getFolderPath(folders, selectedFolder);
 
@@ -307,7 +312,7 @@ function SimTracker() {
             <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: "none", border: "1px solid #D1D5DB", borderRadius: 4, cursor: "pointer", padding: "3px 7px", fontSize: 14, color: "#6B7280" }} title="Toggle sidebar">{sidebarOpen ? "\u25C0" : "\u25B6"}</button>
             <div>
               <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>{title}</h1>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6B7280" }}>{visible.length} sim{visible.length !== 1 ? "s" : ""} {"\u00B7"} {visible.filter((s) => s.status === "running").length} running</p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6B7280" }}>{visible.length} sim{visible.length !== 1 ? "s" : ""} {"\u00B7"} {folderSims.filter((s) => s.status === "running").length} running</p>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -320,10 +325,10 @@ function SimTracker() {
             <button onClick={() => setEditing({ folderId: selectedFolder === "__all__" ? null : selectedFolder })} style={{ padding: "5px 16px", borderRadius: 4, border: "none", background: "#2563EB", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Add</button>
           </div>
         </div>
-        <StatBar sims={visible} />
+        <StatBar sims={folderSims} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            <button onClick={() => setStatusFilter("all")} style={{ padding: "3px 10px", borderRadius: 4, border: statusFilter === "all" ? "1px solid #2563EB" : "1px solid #D1D5DB", background: statusFilter === "all" ? "#EFF6FF" : "transparent", color: statusFilter === "all" ? "#2563EB" : "#6B7280", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>All ({visible.length})</button>
+            <button onClick={() => setStatusFilter("all")} style={{ padding: "3px 10px", borderRadius: 4, border: statusFilter === "all" ? "1px solid #2563EB" : "1px solid #D1D5DB", background: statusFilter === "all" ? "#EFF6FF" : "transparent", color: statusFilter === "all" ? "#2563EB" : "#6B7280", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>All ({folderSims.length})</button>
             {STATUSES.map((s) => <button key={s.key} onClick={() => setStatusFilter(s.key)} style={{ padding: "3px 10px", borderRadius: 4, border: statusFilter === s.key ? `1px solid ${s.color}` : "1px solid #D1D5DB", background: statusFilter === s.key ? s.bg : "transparent", color: statusFilter === s.key ? s.color : "#6B7280", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>{s.icon} {counts[s.key]}</button>)}
           </div>
           <div style={{ display: "flex", gap: 2 }}>
