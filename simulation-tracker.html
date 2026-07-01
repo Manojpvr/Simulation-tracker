@@ -137,12 +137,13 @@ function FolderTree({ folders, sims, selected, onSelect, onAdd, onRename, onDele
   );
 }
 
-function SimCard({ sim, folders, onEdit, onStatusChange, onDelete, onMove, onDuplicate }) {
+function SimCard({ sim, folders, onEdit, onStatusChange, onDelete, onMove, onDuplicate, onCopy, copied }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderLeft: `3px solid ${STATUS_MAP[sim.status].color}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", transition: "box-shadow 0.15s" }} onClick={() => onEdit(sim)} onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)")} onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}>
+    <div style={{ background: "#fff", border: copied ? "1px solid #93C5FD" : "1px solid #E5E7EB", borderLeft: `3px solid ${STATUS_MAP[sim.status].color}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", transition: "box-shadow 0.15s", boxShadow: copied ? "0 0 0 2px #DBEAFE" : "none" }} onClick={() => onEdit(sim)} onMouseEnter={(e) => { if (!copied) e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }} onMouseLeave={(e) => { if (!copied) e.currentTarget.style.boxShadow = "none"; }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <span style={{ fontWeight: 600, fontSize: 13, color: "#111", lineHeight: 1.3, wordBreak: "break-word" }}>{sim.name || "Untitled"}</span>
         <span style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+          <button onClick={(e) => { e.stopPropagation(); onCopy(sim); }} title="Copy (paste into a folder to add as a new version)" style={{ background: "none", border: "none", color: copied ? "#2563EB" : "#9CA3AF", cursor: "pointer", fontSize: 12, padding: "0 2px", lineHeight: 1 }}>{"\u2398"}</button>
           <button onClick={(e) => { e.stopPropagation(); onDuplicate(sim); }} title="Duplicate as new realization" style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 12, padding: "0 2px", lineHeight: 1 }}>{"\u29C9"}</button>
           <button onClick={(e) => { e.stopPropagation(); onDelete(sim.id); }} title="Delete" style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
         </span>
@@ -226,6 +227,7 @@ function SimTracker() {
   const [editing, setEditing] = useState(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState("__all__");
+  const [clipboard, setClipboard] = useState(null);
   const [view, setView] = useState("list");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -252,6 +254,24 @@ function SimTracker() {
     persist([...updated, dup], folders);
   };
   const moveSim = (id, fid) => persist(sims.map((s) => (s.id === id ? { ...s, folderId: fid } : s)), folders);
+  const copySim = (sim) => setClipboard(sim);
+  const pasteSim = () => {
+    if (!clipboard) return;
+    const target = selectedFolder === "__all__" ? null : selectedFolder;
+    const inFolder = sims.filter((s) => s.folderId === target);
+    const exists = inFolder.some((s) => s.name === clipboard.name);
+    let updated = sims;
+    const pasted = { ...clipboard, id: uid(), folderId: target, created: Date.now() };
+    if (exists) {
+      const plan = planRealization(clipboard.name, inFolder);
+      if (plan.renameOriginal) {
+        updated = updated.map((s) => (s.folderId === target && s.name === clipboard.name ? { ...s, name: plan.originalNewName } : s));
+      }
+      pasted.name = plan.newName;
+      pasted.notes = clipboard.notes ? `Version of ${plan.base}\n${clipboard.notes}` : `Version of ${plan.base}`;
+    }
+    persist([...updated, pasted], folders);
+  };
   const addFolder = (f) => { persist(sims, [...folders, f]); setAddingFolder(false); };
   const renFolder = (id, name) => persist(sims, folders.map((f) => (f.id === id ? { ...f, name } : f)));
   const delFolder = (id) => {
@@ -291,6 +311,9 @@ function SimTracker() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {clipboard && (
+              <button onClick={pasteSim} title={`Paste "${clipboard.name}" into ${title}` + (sims.some((s) => s.folderId === (selectedFolder === "__all__" ? null : selectedFolder) && s.name === clipboard.name) ? " as a new version" : "")} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 4, border: "1px solid #93C5FD", background: "#EFF6FF", color: "#2563EB", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{"\u2397"} Paste <span style={{ maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.75 }}>{clipboard.name}</span><span onClick={(e) => { e.stopPropagation(); setClipboard(null); }} title="Clear clipboard" style={{ marginLeft: 2, opacity: 0.6 }}>{"\u00D7"}</span></button>
+            )}
             <button onClick={() => exportData(sims, folders)} style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #D1D5DB", background: "transparent", color: "#9CA3AF", fontSize: 11, cursor: "pointer" }} title="Export JSON">{"\u2B07"} Export</button>
             <button onClick={handleImport} style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #D1D5DB", background: "transparent", color: "#9CA3AF", fontSize: 11, cursor: "pointer" }} title="Import JSON">{"\u2B06"} Import</button>
             <button onClick={reset} style={{ padding: "5px 12px", borderRadius: 4, border: "1px solid #D1D5DB", background: "transparent", color: "#9CA3AF", fontSize: 12, cursor: "pointer" }}>Reset</button>
@@ -313,7 +336,7 @@ function SimTracker() {
               const col = visible.filter((sim) => sim.status === s.key);
               return <div key={s.key} style={{ minWidth: 140, background: `color-mix(in srgb, ${s.bg} 40%, transparent)`, borderRadius: 6, padding: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "0 2px" }}><span style={{ fontSize: 12, color: s.color }}>{s.icon}</span><span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{s.label}</span><span style={{ fontSize: 10, color: s.color, background: s.bg, borderRadius: 8, padding: "0 6px", fontWeight: 600 }}>{col.length}</span></div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{col.map((sim) => <SimCard key={sim.id} sim={sim} folders={folders} onEdit={setEditing} onStatusChange={chStatus} onDelete={delSim} onMove={moveSim} onDuplicate={dupSim} />)}{col.length === 0 && <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 11, color: "#9CA3AF" }}>{"\u2014"}</div>}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{col.map((sim) => <SimCard key={sim.id} sim={sim} folders={folders} onEdit={setEditing} onStatusChange={chStatus} onDelete={delSim} onMove={moveSim} onDuplicate={dupSim} onCopy={copySim} copied={clipboard?.id === sim.id} />)}{col.length === 0 && <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 11, color: "#9CA3AF" }}>{"\u2014"}</div>}</div>
               </div>;
             })}
           </div>
@@ -321,7 +344,7 @@ function SimTracker() {
         {view === "list" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {visible.length === 0 && <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No simulations here yet. Click + Add to create one.</div>}
-            {visible.map((sim) => <SimCard key={sim.id} sim={sim} folders={folders} onEdit={setEditing} onStatusChange={chStatus} onDelete={delSim} onMove={moveSim} onDuplicate={dupSim} />)}
+            {visible.map((sim) => <SimCard key={sim.id} sim={sim} folders={folders} onEdit={setEditing} onStatusChange={chStatus} onDelete={delSim} onMove={moveSim} onDuplicate={dupSim} onCopy={copySim} copied={clipboard?.id === sim.id} />)}
           </div>
         )}
       </div>
